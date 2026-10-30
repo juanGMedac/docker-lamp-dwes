@@ -41,7 +41,7 @@ docker compose version
    - **Con Git** (recomendado):
 
      ```bash
-     git clone https://github.com/USUARIO/docker-lamp-dwes.git
+     git clone https://github.com/juanGMedac/docker-lamp-dwes.git
      cd docker-lamp-dwes
      ```
 
