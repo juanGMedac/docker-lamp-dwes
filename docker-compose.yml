@@ -1,0 +1,106 @@
+# =====================================================================
+#  Entorno LAMP para 0613 Desarrollo Web en Entorno Servidor (2º DAW)
+#  Apache 2.4  +  PHP-FPM 8.4  +  MySQL 8.4 LTS  +  phpMyAdmin 5.2
+#
+#  Arranque:   docker compose up -d --build --wait
+#  Parada:     docker compose stop
+#  Web:        http://localhost:8080
+#  phpMyAdmin: http://localhost:8081
+#
+#  Todos los puertos y credenciales están en el archivo .env
+# =====================================================================
+
+# Nombre fijo del proyecto: si el alumno renombra o mueve la carpeta,
+# sigue usando los mismos contenedores y el mismo volumen de datos.
+name: dwes
+
+services:
+
+  # ------------------------------------------------------------------
+  # Servidor web: recibe la petición HTTP. Los .php los delega en PHP-FPM.
+  # ------------------------------------------------------------------
+  web:
+    build: ./docker/apache
+    container_name: dwes-web
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    volumes:
+      - ./www:/var/www/html
+    depends_on:
+      - php
+
+  # ------------------------------------------------------------------
+  # Intérprete de PHP (FastCGI). Monta la misma carpeta y en la misma
+  # ruta que Apache: imprescindible para que encuentre los scripts.
+  # ------------------------------------------------------------------
+  php:
+    build:
+      context: ./docker/php
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    container_name: dwes-php
+    volumes:
+      - ./www:/var/www/html
+    environment:
+      TZ: Europe/Madrid
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-dwes}
+      DB_USER: ${MYSQL_USER:-dwes}
+      DB_PASS: ${MYSQL_PASSWORD:-dwes}
+      PMA_URL: http://localhost:${PMA_PORT:-8081}
+      XDEBUG_MODE: ${XDEBUG_MODE:-off}
+    extra_hosts:
+      # Necesario en Linux para que Xdebug llegue al editor del anfitrión.
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ------------------------------------------------------------------
+  # Base de datos. Las variables MYSQL_* SOLO se aplican la primera vez
+  # que se crea el volumen. Cambiarlas después no tiene efecto (ver README).
+  # ------------------------------------------------------------------
+  db:
+    image: mysql:8.4
+    container_name: dwes-db
+    environment:
+      TZ: Europe/Madrid
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-dwes}
+      MYSQL_USER: ${MYSQL_USER:-dwes}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-dwes}
+    ports:
+      # Solo para herramientas del anfitrión (Workbench, VS Code, DBeaver).
+      # Desde PHP se conecta SIEMPRE a db:3306, nunca a este puerto.
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 20s
+
+  # ------------------------------------------------------------------
+  # Administración gráfica de MySQL. Entra directamente, sin login.
+  # ------------------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin:5.2
+    container_name: dwes-pma
+    environment:
+      PMA_HOST: db
+      PMA_USER: root
+      PMA_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      UPLOAD_LIMIT: 64M
+    ports:
+      - "127.0.0.1:${PMA_PORT:-8081}:80"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mysql_data:

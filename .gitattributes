@@ -1,0 +1,2 @@
+# Fuerza finales de línea LF (evita fallos en los contenedores Linux al clonar en Windows)
+* text=auto eol=lf
